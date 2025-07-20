@@ -155,3 +155,35 @@ In general, you will be:
 
 # -- Worldquantuniversity
 
+
+
+# SQL - Trigger 
+
+In MySQL, a trigger is a named database object that automatically executes a set of SQL statements when a specific event occurs on a table. 
+These events are typically INSERT, UPDATE, or DELETE operations. Triggers can be defined to execute either before or after the triggering event. 
+
+# Key Concepts:
+Associated Table: Each trigger is linked to a specific table within the database. 
+Triggering Events: Triggers can be activated by INSERT, UPDATE, or DELETE statements on the associated table. 
+Timing: Triggers can be set to execute BEFORE or AFTER the triggering event. 
+Row vs. Statement: Triggers can be defined to execute for each row affected by the triggering statement (row-level) or once for the entire statement (statement-level). 
+NEW and OLD: In UPDATE and INSERT triggers, you can reference the new row being inserted or updated using NEW.column_name. For UPDATE and DELETE triggers, OLD.column_name refers to the original row before the update or deletion. 
+
+CREATE TRIGGER update_after
+AFTER UPDATE ON customer
+FOR EACH ROW
+BEGIN
+    INSERT INTO micro_statement (acc_no, avail_balance)
+    VALUES(NEW.acc_no, NEW.avail_balance);
+END;
+
+
+This trigger, update_after, is activated after an UPDATE statement on the customer table. For each row updated, it inserts the new account number and available balance into the micro_statement table. 
+
+# When to Use Triggers:
+Data Validation: Enforce data integrity rules, such as ensuring that sell prices are not less than buy prices. 
+Auditing: Automatically record changes to data, maintaining audit trails. 
+Complex Business Logic: Implement intricate business rules that require multiple steps to be executed automatically. 
+Data Synchronization: Keep data consistent across multiple tables. 
+Incrementing Counters: Automatically update counters or other related values when data is modified. 
+
