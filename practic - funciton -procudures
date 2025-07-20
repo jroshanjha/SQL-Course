@@ -1,0 +1,251 @@
+# 2025 -07 - 20
+
+# -- Function: Validate Email Format
+CREATE FUNCTION is_valid_email(email VARCHAR(255))
+RETURNS TINYINT
+DETERMINISTIC
+BEGIN
+    DECLARE result TINYINT;
+    IF email REGEXP '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$' THEN
+        SET result = 1;
+    ELSE
+        SET result = 0;
+    END IF;
+    RETURN result;
+END $$
+
+DELIMITER ;
+SELECT 'test@example.com' AS email, is_valid_email('test@example.com') AS is_valid;
+
+DELIMITER $$
+
+# ---- Function: Get Department Name
+CREATE FUNCTION get_dept_name(p_dept_id INT)
+RETURNS VARCHAR(50)
+DETERMINISTIC
+BEGIN
+    DECLARE dept_name VARCHAR(50);
+    SELECT dept_name INTO dept_name
+    FROM departments
+    WHERE dept_id = p_dept_id;
+    RETURN dept_name;
+END $$
+
+DELIMITER ;
+
+SELECT get_dept_name(1) AS dept;
+
+
+
+# -- Procedure: Promote Employee
+-- Increase salary by a fixed amount and log the promotion in an audit table.
+
+CREATE TABLE promotions_audit (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  emp_id INT,
+  old_salary DECIMAL(10,2),
+  new_salary DECIMAL(10,2),
+  promoted_on DATETIME
+);
+DELIMITER $$
+
+CREATE PROCEDURE promote_employee (
+    IN p_emp_id INT,
+    IN p_raise DECIMAL(10,2)
+)
+BEGIN
+    DECLARE v_old_salary DECIMAL(10,2);
+    DECLARE v_new_salary DECIMAL(10,2);
+
+    SELECT salary INTO v_old_salary
+    FROM employees
+    WHERE emp_id = p_emp_id;
+
+    SET v_new_salary = v_old_salary + p_raise;
+
+    UPDATE employees
+    SET salary = v_new_salary
+    WHERE emp_id = p_emp_id;
+
+    INSERT INTO promotions_audit(emp_id, old_salary, new_salary, promoted_on)
+    VALUES (p_emp_id, v_old_salary, v_new_salary, NOW());
+END $$
+
+DELIMITER ;
+
+
+CALL promote_employee(2, 5000);  -- give Bob a $5000 raise
+SELECT * FROM promotions_audit;
+
+
+
+# -- Bulk Salary Adjustment by Department
+-- Increase all employees’ salaries in a given department by a percentage.
+
+
+DELIMITER $$
+
+CREATE PROCEDURE adjust_department_salary (
+    IN p_dept_id INT,
+    IN p_percentage DECIMAL(5,2)
+)
+BEGIN
+    UPDATE employees
+    SET salary = salary + (salary * p_percentage / 100)
+    WHERE dept_id = p_dept_id;
+END $$
+
+DELIMITER ;
+
+CALL adjust_department_salary(1, 10);  -- 10% increase in Engineering department
+
+
+-- Procedure: Transfer Employee to Another Department
+-- Change an employee’s department and record the move in an audit table.
+
+CREATE TABLE dept_transfers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  emp_id INT,
+  old_dept INT,
+  new_dept INT,
+  transfer_date DATETIME
+);
+
+DELIMITER $$
+
+CREATE PROCEDURE transfer_employee (
+    IN p_emp_id INT,
+    IN p_new_dept_id INT
+)
+BEGIN
+    DECLARE v_old_dept INT;
+
+    SELECT dept_id INTO v_old_dept
+    FROM employees
+    WHERE emp_id = p_emp_id;
+
+    UPDATE employees
+    SET dept_id = p_new_dept_id
+    WHERE emp_id = p_emp_id;
+
+    INSERT INTO dept_transfers(emp_id, old_dept, new_dept, transfer_date)
+    VALUES (p_emp_id, v_old_dept, p_new_dept_id, NOW());
+END $$
+
+DELIMITER ;
+
+
+CALL transfer_employee(3, 3);  -- Move Charlie to Finance
+SELECT * FROM dept_transfers;
+
+
+
+-- Employee Performance and Payroll Management
+
+-- 📁 1. Database Schema
+-- Departments Table
+CREATE TABLE departments (
+  dept_id INT PRIMARY KEY,
+  dept_name VARCHAR(50)
+);
+
+-- Employees Table
+CREATE TABLE employees (
+  emp_id INT PRIMARY KEY,
+  emp_name VARCHAR(50),
+  dept_id INT,
+  salary DECIMAL(10,2),
+  join_date DATE,
+  rating DECIMAL(3,2)
+);
+
+-- Payroll Log Table
+CREATE TABLE payroll_log (
+  log_id INT AUTO_INCREMENT PRIMARY KEY,
+  emp_id INT,
+  old_salary DECIMAL(10,2),
+  new_salary DECIMAL(10,2),
+  log_time DATETIME
+);
+
+-- 📥 2. Insert Dummy Data
+INSERT INTO departments VALUES
+(1, 'Engineering'), (2, 'HR'), (3, 'Finance');
+
+INSERT INTO employees VALUES
+(101, 'Alice', 1, 70000, '2020-01-10', 4.5),
+(102, 'Bob', 1, 65000, '2021-06-15', 3.2),
+(103, 'Charlie', 2, 50000, '2019-03-25', 4.8),
+(104, 'Diana', 3, 90000, '2018-11-01', 4.9);
+
+
+-- Bonus Calculation
+-- Returns bonus based on performance rating.
+
+
+DELIMITER $$
+
+CREATE FUNCTION calculate_bonus(rating DECIMAL(3,2), salary DECIMAL(10,2))
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+  DECLARE bonus DECIMAL(10,2);
+  IF rating >= 4.5 THEN
+    SET bonus = salary * 0.20;
+  ELSEIF rating >= 3.5 THEN
+    SET bonus = salary * 0.10;
+  ELSE
+    SET bonus = salary * 0.05;
+  END IF;
+  RETURN bonus;
+END $$
+
+DELIMITER ;
+SELECT emp_name, calculate_bonus(rating, salary) AS bonus FROM employees;
+
+-- Update Salary with Bonus & Log
+
+DELIMITER $$
+
+CREATE PROCEDURE update_salary_with_bonus(IN p_emp_id INT)
+BEGIN
+  DECLARE v_salary DECIMAL(10,2);
+  DECLARE v_rating DECIMAL(3,2);
+  DECLARE v_bonus DECIMAL(10,2);
+  DECLARE v_new_salary DECIMAL(10,2);
+
+  SELECT salary, rating INTO v_salary, v_rating FROM employees WHERE emp_id = p_emp_id;
+
+  SET v_bonus = calculate_bonus(v_rating, v_salary);
+  SET v_new_salary = v_salary + v_bonus;
+
+  UPDATE employees SET salary = v_new_salary WHERE emp_id = p_emp_id;
+
+  INSERT INTO payroll_log(emp_id, old_salary, new_salary, log_time)
+  VALUES (p_emp_id, v_salary, v_new_salary, NOW());
+END $$
+
+DELIMITER ;
+
+CALL update_salary_with_bonus(101);
+
+-- Employee Payroll Summary
+CREATE OR REPLACE VIEW vw_payroll_summary AS
+SELECT 
+  e.emp_id,
+  e.emp_name,
+  d.dept_name,
+  e.salary,
+  e.rating,
+  calculate_bonus(e.rating, e.salary) AS estimated_bonus
+FROM employees e
+JOIN departments d ON e.dept_id = d.dept_id;
+
+SELECT * FROM vw_payroll_summary;
+
+-- Top Performers
+
+CREATE OR REPLACE VIEW vw_top_performers AS
+SELECT emp_id, emp_name, rating, salary
+FROM employees
+WHERE rating >= 4.5;
